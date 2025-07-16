@@ -1,0 +1,66 @@
+# .github/workflows/download-bandcamp.yml
+name: Download Bandcamp Audio
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Bandcamp のトラック／アルバム URL'
+        required: true
+        default: ''
+
+jobs:
+  download-and-commit:
+    name: ダウンロードしてコミット
+    runs-on: ubuntu-latest
+    steps:
+      # 1. リポジトリをチェックアウト（GitHub Token でプッシュ権限も取得）
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # GITHUB_TOKEN を ~/.git-credentials に保存
+
+      # 2. yt-dlp をインストール
+      - name: Install yt-dlp
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install yt-dlp
+
+      # 3. ダウンロード先ディレクトリを作成
+      - name: Prepare output directory
+        run: |
+          mkdir -p audio
+
+      # 4. Bandcamp から音源をダウンロード
+      - name: Download audio from Bandcamp
+        run: |
+          yt-dlp \
+            --extract-audio \
+            --audio-format mp3 \
+            --audio-quality 0 \
+            --output 'audio/%(title)s.%(ext)s' \
+            "${{ github.event.inputs.url }}"
+
+      # 5. Git のユーザー情報を設定
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 6. ダウンロードしたファイルをステージング
+      - name: Add downloaded files
+        run: |
+          git add audio/
+
+      # 7. 変更があればコミット＆プッシュ
+      - name: Commit & Push changes
+        run: |
+          if ! git diff --cached --quiet; then
+            git commit -m "Add audio from Bandcamp: ${{ github.event.inputs.url }}"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No new files to commit"
+          fi
+        env:
+          # GitHub が自動で設定するトークン
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
